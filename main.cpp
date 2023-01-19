@@ -15,8 +15,8 @@ bool isVarChar (char c) {
 
 string newfname, line;
 vector<string> vars[64];
-int scope = 0, balance = 0, prevBalance = 0, startIndex, endIndex;
-bool inString = false, inTemplateString = false, inComment = false, inDefine[64] = {false}, hasArgs = false;
+int scope = 0, balance = 0, startIndex, templateEmbedDepth = 0;
+bool inString = false, inTemplateString = false, inComment = false, inDefine[64] = {false}, inAssignment = false, hasArgs = false;
 
 int main (const int argc, char *argv[]) {
 
@@ -54,9 +54,9 @@ int main (const int argc, char *argv[]) {
       if (line[i] == '*' && line[i+1] == '/') { inComment = false; i ++; continue; }
       if (inComment) continue;
 
-      // Concatenate template string literals, don't continue after
+      // Concatenate template literals, don't continue after
       if (line[i] == '`') {
-        inTemplateString = !inTemplateString;
+        if (templateEmbedDepth == 0) inTemplateString = !inTemplateString;
         line[i] = '"';
         continue;
       }
@@ -69,14 +69,18 @@ int main (const int argc, char *argv[]) {
         }
 
         if (line[i] == '$' && line[i + 1] == '{') {
-          line[i] = '"';
-          line[++i] = '+';
+          templateEmbedDepth ++;
+          line.erase(i, 2);
+          line.insert(i, "\"+(");
+          i += 2;
           continue;
         }
         
         if (line[i] == '}') {
-          line[i] = '+';
-          line.insert(++i, "\"");
+          templateEmbedDepth --;
+          line.erase(i, 1);
+          line.insert(i, ")+\"");
+          i += 2;
           continue;
         }
 
@@ -92,12 +96,17 @@ int main (const int argc, char *argv[]) {
       if (line[i] == ';') { inDefine[scope] = false; continue; }
 
       // Calculate current scope by counting brackets
-      if (line[i] == '{') { scope ++; continue; }
-      if (line[i] == '}') { inDefine[scope] = false; scope --; continue; }
-
-      // Calculate bracket balance
-      if (line[i] == '(') { balance ++; continue; }
-      if (line[i] == ')') { balance --; continue; }
+      if (line[i] == '{') {
+        scope ++;
+        continue;
+      }
+      // Closing a block means never returning to it, so we clear all current scope specific values
+      if (line[i] == '}') {
+        inDefine[scope] = false;
+        vars[scope].clear();
+        scope --;
+        continue;
+      }
 
       // Find variables defined using the "let" keyword
       if (!inDefine[scope] && line.compare(i, 4, "let ") == 0 && (i == 0 || !isVarChar(line[i - 1]))) {
@@ -109,10 +118,9 @@ int main (const int argc, char *argv[]) {
         inDefine[scope] = true;
 
         for (startIndex = i + 6; !isVarChar(line[startIndex]); startIndex ++);
-        for (endIndex = startIndex + 1; isVarChar(line[endIndex]); endIndex ++);
+        for (i = startIndex + 1; isVarChar(line[i]); i ++);
 
-        vars[scope].push_back(line.substr(startIndex, endIndex - startIndex));
-        i = endIndex;
+        vars[scope].push_back(line.substr(startIndex, i - startIndex));
         continue;
 
       }
@@ -123,15 +131,25 @@ int main (const int argc, char *argv[]) {
         // Remove "var" keyword
         line.erase(i, 4);
 
-        prevBalance = balance;
+        inAssignment = true;
+        balance = 0;
 
-        for (int j = i; j < line.length(); j ++) {
+        // Change '=' to the slot assignment operator '<-'
+        while (i < line.length()) {
 
-          if (line[j] == '(') balance ++;
-          else if (line[j] == ')') balance --;
-          else if (line[j] == '=' && balance == prevBalance) {
-            line[j] = '-';
-            line.insert(j++, "<");
+          i ++;
+          if (!inAssignment) {
+
+            if (line[i] == '(' || line[i] == '{') balance ++;
+            else if (line[i] == ')' || line[i] == '}') balance --;
+            else if (line[i] == ',' && balance == 0) inAssignment = true;
+
+          } else if (line[i] == '=') {
+
+            line[i] = '-';
+            line.insert(i++, "<");
+            inAssignment = false;
+
           }
 
         }
@@ -144,10 +162,9 @@ int main (const int argc, char *argv[]) {
       if (inDefine[scope] && line[i] == ',') {
 
         for (startIndex = i + 1; !isVarChar(line[startIndex]); startIndex ++);
-        for (endIndex = startIndex + 1; isVarChar(line[endIndex]); endIndex ++);
+        for (i = startIndex + 1; isVarChar(line[i]); i ++);
 
-        vars[scope].push_back(line.substr(startIndex, endIndex - startIndex));
-        i = endIndex;
+        vars[scope].push_back(line.substr(startIndex, i - startIndex));
         continue;
 
       }
@@ -157,50 +174,54 @@ int main (const int argc, char *argv[]) {
 
         for (startIndex = i + 8; line[startIndex] != '('; startIndex ++);
 
-        prevBalance = balance;
-        balance ++;
+        balance = 1;
         hasArgs = false;
 
-        for (endIndex = startIndex + 1; balance != prevBalance; endIndex ++) {
+        for (i = startIndex + 1; balance != 0; i ++) {
           
-          if (line[endIndex] == '(') balance ++;
-          else if (line[endIndex] == ')') balance --;
+          if (line[i] == '(') balance ++;
+          else if (line[i] == ')') balance --;
 
           // Find variables in the function definition
-          if (isVarChar(line[endIndex])) {
+          if (isVarChar(line[i])) {
             hasArgs = true;
-            if (!isVarChar(line[endIndex - 1])) startIndex = endIndex;
+            if (!isVarChar(line[i - 1])) startIndex = i;
           } else {
-            if (isVarChar(line[endIndex - 1])) vars[scope + 1].push_back(line.substr(startIndex, endIndex - startIndex));
+            if (isVarChar(line[i - 1])) vars[scope + 1].push_back(line.substr(startIndex, i - startIndex));
           }
 
         }
 
-        endIndex --;
-        for (int j = 0; j < vars[scope].size(); j ++) {
-          
-          if (j > 0 || hasArgs) {
-            line.insert(endIndex, ",");
-            endIndex ++;
-          }
+        i --;
+        for (int j = 0; j <= scope; j ++) {
 
-          line.insert(endIndex, vars[scope][j]);
-          endIndex += vars[scope][j].length();
-          line.insert(endIndex, "=");
-          endIndex ++;
-          line.insert(endIndex, vars[scope][j]);
-          endIndex += vars[scope][j].length();
+          for (int k = 0; k < vars[j].size(); k ++) {
+
+            if (hasArgs || k > 0) {
+              hasArgs = true;
+              line.insert(i, ",");
+              i ++;
+            }
+
+            line.insert(i, vars[j][k]);
+            i += vars[j][k].length();
+            line.insert(i, "=");
+            i ++;
+            line.insert(i, vars[j][k]);
+            i += vars[j][k].length();
+
+          }
 
         }
 
-        i = endIndex;
         continue;
 
       }
 
     }
 
-    output << line << '\n';
+    if (inTemplateString) output << line << "\\n";
+    else output << line << '\n';
 
   }
 

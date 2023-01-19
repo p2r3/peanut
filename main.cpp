@@ -40,7 +40,6 @@ int main (const int argc, char *argv[]) {
 
   while (getline(input, line)) {
 
-    inComment = false;
     inDefine[scope] = false;
 
     for (int i = 0; i < line.length(); i ++) {
@@ -49,9 +48,6 @@ int main (const int argc, char *argv[]) {
       if (line[i] == '\\') { i ++; continue; }
 
       // Don't continue parsing if we're in a comment
-      if (line[i] == '/' && line[i+1] == '/') { inComment = true;  i ++; continue; }
-      if (line[i] == '/' && line[i+1] == '*') { inComment = true;  i ++; continue; }
-      if (line[i] == '*' && line[i+1] == '/') { inComment = false; i ++; continue; }
       if (inComment) continue;
 
       // Concatenate template literals, don't continue after
@@ -92,7 +88,12 @@ int main (const int argc, char *argv[]) {
       if (line[i] == '"') { inString = !inString; continue; }
       if (inString) continue;
 
-      // Close variable definition set
+      // Check if we're in a comment
+      if (line[i] == '/' && line[i+1] == '/') break;
+      if (line[i] == '/' && line[i+1] == '*') { inComment = true;  i ++; continue; }
+      if (line[i] == '*' && line[i+1] == '/') { inComment = false; i ++; continue; }
+
+      // Close variable definition set upon semicolon
       if (line[i] == ';') { inDefine[scope] = false; continue; }
 
       // Calculate current scope by counting brackets

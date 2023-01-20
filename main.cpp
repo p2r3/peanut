@@ -13,26 +13,28 @@ bool isVarChar (char c) {
   return false;
 }
 
-string newfname, line;
+string inputfname, newfname, line;
 vector<string> vars[64];
 int scope = 0, balance = 0, startIndex, templateEmbedDepth = 0;
-bool inString = false, inTemplateString = false, inComment = false, inDefine[64] = {false}, inAssignment = false, hasArgs = false;
+bool inString = false, inTemplateString = false, inComment = false, inDefine[64] = {false}, inAssignment, hasArgs, functionAssigned = false;
 
 int main (const int argc, char *argv[]) {
 
   if (argc < 2) {
-    cout << "No file was provided.\n";
-    return 1;
+    cout << "Enter file path: ";
+    getline(cin, inputfname);
+  } else {
+    inputfname = argv[1];
   }
 
-  newfname = argv[1];
+  newfname = inputfname;
   newfname.erase(newfname.length() - 4, 1);
 
-  ifstream input(argv[1]);
+  ifstream input(inputfname);
   ofstream output(newfname);
 
   if (!input.is_open()) {
-    cout << "File \"" << argv[1] << " could not be opened.\n";
+    cout << "File \"" << inputfname << " could not be opened.\n";
     input.close();
     output.close();
     return 1;
@@ -71,7 +73,7 @@ int main (const int argc, char *argv[]) {
           i += 2;
           continue;
         }
-        
+
         if (line[i] == '}') {
           templateEmbedDepth --;
           line.erase(i, 1);
@@ -128,7 +130,7 @@ int main (const int argc, char *argv[]) {
 
       // Find globals defined using the "var" keyword
       if (!inDefine[scope] && line.compare(i, 4, "var ") == 0 && (i == 0 || !isVarChar(line[i - 1]))) {
-      
+
         // Remove "var" keyword
         line.erase(i, 4);
 
@@ -173,13 +175,22 @@ int main (const int argc, char *argv[]) {
       // Apply found variables to functions within the same scope
       if (line.compare(i, 8, "function") == 0 && (i == 0 || !isVarChar(line[i - 1])) && !isVarChar(line[i + 8])) {
 
+        functionAssigned = false;
+        for (int j = i - 1; j >= 0; j --) {
+          if (line[j] == '=') {
+            functionAssigned = true;
+            break;
+          }
+          if (isVarChar(line[j])) break;
+        }
+
         for (startIndex = i + 8; line[startIndex] != '('; startIndex ++);
 
         balance = 1;
         hasArgs = false;
 
         for (i = startIndex + 1; balance != 0; i ++) {
-          
+
           if (line[i] == '(') balance ++;
           else if (line[i] == ')') balance --;
 
@@ -197,6 +208,8 @@ int main (const int argc, char *argv[]) {
         for (int j = 0; j <= scope; j ++) {
 
           for (int k = 0; k < vars[j].size(); k ++) {
+
+            if (j == scope && functionAssigned && k == vars[j].size() - 1) continue;
 
             if (hasArgs || k > 0) {
               hasArgs = true;

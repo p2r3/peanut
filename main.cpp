@@ -15,8 +15,8 @@ bool isVarChar (char c) {
 
 string inputfname, newfname, line;
 vector<string> vars[64];
-int scope = 0, balance = 0, startIndex, templateEmbedDepth = 0;
-bool inString = false, inTemplateString = false, inComment = false, inDefine[64] = {false}, inAssignment, hasArgs, functionAssigned = false;
+int scope = 0, balance = 0, startIndex, templateEmbedDepth = 0, functionAssigned = 0;
+bool inString = false, inTemplateString = false, inComment = false, inDefine[64] = {false}, inAssignment, hasArgs, functionHasName;
 
 int main (const int argc, char *argv[]) {
 
@@ -175,16 +175,30 @@ int main (const int argc, char *argv[]) {
       // Apply found variables to functions within the same scope
       if (line.compare(i, 8, "function") == 0 && (i == 0 || !isVarChar(line[i - 1])) && !isVarChar(line[i + 8])) {
 
-        functionAssigned = false;
         for (int j = i - 1; j >= 0; j --) {
           if (line[j] == '=') {
-            functionAssigned = true;
+            functionAssigned = 1;
             break;
           }
           if (isVarChar(line[j])) break;
         }
 
-        for (startIndex = i + 8; line[startIndex] != '('; startIndex ++);
+        functionHasName = false;
+        for (startIndex = i + 8; startIndex < line.length(); startIndex ++) {
+
+          if (!functionHasName) {
+            if (isVarChar(line[startIndex])) {
+              functionHasName = true;
+              functionAssigned ++;
+            }
+            i = startIndex;
+          } else {
+            if (!isVarChar(line[startIndex])) vars[scope].push_back(line.substr(i, startIndex - i));
+          }
+
+          if (line[startIndex] == '(') break;
+
+        }
 
         balance = 1;
         hasArgs = false;
@@ -209,7 +223,10 @@ int main (const int argc, char *argv[]) {
 
           for (int k = 0; k < vars[j].size(); k ++) {
 
-            if (j == scope && functionAssigned && k == vars[j].size() - 1) continue;
+            if (j == scope && k == vars[j].size() - functionAssigned) {
+              functionAssigned --;
+              continue;
+            }
 
             if (hasArgs || k > 0) {
               hasArgs = true;

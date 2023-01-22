@@ -13,10 +13,13 @@ bool isVarChar (char c) {
   return false;
 }
 
-string inputfname, newfname, line;
-vector<string> vars[64];
-int scope = 0, balance = 0, startIndex, templateEmbedDepth = 0, functionAssigned = 0;
-bool inString = false, inTemplateString = false, inComment = false, inDefine[64] = {false}, inAssignment, hasArgs, functionHasName;
+string inputfname, newfname, line, tmparg;
+vector<string> vars[64], functionArgs;
+int scope = 0, balance = 0, startIndex, endIndex, templateEmbedDepth = 0, functionAssigned = 0, functionArgsCount;
+bool inString = false, inTemplateString = false, inComment = false, inDefine[64] = {false}, inAssignment, functionHasName, functionRemovedArg, functionHasArgs;
+
+// 0 - none, 1 - function, 2 - object
+int bracketType[64] = {0};
 
 int main (const int argc, char *argv[]) {
 
@@ -49,11 +52,8 @@ int main (const int argc, char *argv[]) {
       // Skip escaped characters
       if (line[i] == '\\') { i ++; continue; }
 
-      // Don't continue parsing if we're in a comment
-      if (inComment) continue;
-
       // Concatenate template literals, don't continue after
-      if (line[i] == '`') {
+      if (line[i] == '`' && !inComment) {
         if (templateEmbedDepth == 0) inTemplateString = !inTemplateString;
         line[i] = '"';
         continue;
@@ -90,25 +90,61 @@ int main (const int argc, char *argv[]) {
       if (line[i] == '"') { inString = !inString; continue; }
       if (inString) continue;
 
-      // Check if we're in a comment
+      // Don't continue parsing if we're in a comment
       if (line[i] == '/' && line[i+1] == '/') break;
       if (line[i] == '/' && line[i+1] == '*') { inComment = true;  i ++; continue; }
       if (line[i] == '*' && line[i+1] == '/') { inComment = false; i ++; continue; }
+      if (inComment) continue;
 
       // Close variable definition set upon semicolon
       if (line[i] == ';') { inDefine[scope] = false; continue; }
 
-      // Calculate current scope by counting brackets
-      if (line[i] == '{') {
-        scope ++;
-        continue;
+      if (!inDefine[scope] || bracketType[scope + 1] == 1) {
+
+        // Calculate current scope by counting brackets
+        if (line[i] == '{') {
+          scope ++;
+          continue;
+        }
+        // Closing a block means never returning to it, so we clear all current scope specific values
+        if (line[i] == '}') {
+          inDefine[scope] = false;
+          vars[scope].clear();
+          bracketType[scope] = 0;
+          scope --;
+          continue;
+        }
+
+      } else if (inDefine[scope]) {
+
+        if (line[i] == '{') {
+          scope ++;
+          bracketType[scope] = 2;
+          continue;
+        }
+
+        if (line[i] == '}') {
+          bracketType[scope] = 0;
+          scope --;
+          continue;
+        }
+
       }
-      // Closing a block means never returning to it, so we clear all current scope specific values
-      if (line[i] == '}') {
-        inDefine[scope] = false;
-        vars[scope].clear();
-        scope --;
-        continue;
+
+      // Define behavior in objects
+      if (bracketType[scope] == 2) {
+
+        if (line[i] == ':') {
+          line[i] = '=';
+          inDefine[scope] = true;
+          continue;
+        }
+
+        if (line[i] == ',') {
+          inDefine[scope] = false;
+          continue;
+        }
+
       }
 
       // Find variables defined using the "let" keyword
@@ -134,23 +170,23 @@ int main (const int argc, char *argv[]) {
         // Remove "var" keyword
         line.erase(i, 4);
 
+        inDefine[scope] = true;
         inAssignment = true;
         balance = 0;
 
         // Change '=' to the slot assignment operator '<-'
-        while (i < line.length()) {
+        for (int j = i + 1; j < line.length(); j ++) {
 
-          i ++;
           if (!inAssignment) {
 
-            if (line[i] == '(' || line[i] == '{') balance ++;
-            else if (line[i] == ')' || line[i] == '}') balance --;
-            else if (line[i] == ',' && balance == 0) inAssignment = true;
+            if (line[j] == '(' || line[j] == '{') balance ++;
+            else if (line[j] == ')' || line[j] == '}') balance --;
+            else if (line[j] == ',' && balance == 0) inAssignment = true;
 
-          } else if (line[i] == '=') {
+          } else if (line[j] == '=') {
 
-            line[i] = '-';
-            line.insert(i++, "<");
+            line[j] = '-';
+            line.insert(j++, "<");
             inAssignment = false;
 
           }
@@ -175,50 +211,55 @@ int main (const int argc, char *argv[]) {
       // Apply found variables to functions within the same scope
       if (line.compare(i, 8, "function") == 0 && (i == 0 || !isVarChar(line[i - 1])) && !isVarChar(line[i + 8])) {
 
-        for (int j = i - 1; j >= 0; j --) {
-          if (line[j] == '=') {
-            functionAssigned = 1;
-            break;
-          }
-          if (isVarChar(line[j])) break;
-        }
-
+        bracketType[scope + 1] = 1;
         functionHasName = false;
-        for (startIndex = i + 8; startIndex < line.length(); startIndex ++) {
+        endIndex = i + 8;
+
+        for (startIndex = endIndex; startIndex < line.length(); startIndex ++) {
 
           if (!functionHasName) {
-            if (isVarChar(line[startIndex])) {
-              functionHasName = true;
-              functionAssigned ++;
-            }
-            i = startIndex;
-          } else {
-            if (!isVarChar(line[startIndex])) vars[scope].push_back(line.substr(i, startIndex - i));
+            if (isVarChar(line[startIndex])) functionHasName = true;
+            endIndex = startIndex;
+          } else if (!isVarChar(line[startIndex]) && functionAssigned == 0) {
+            functionAssigned = 1;
+            vars[scope].push_back(line.substr(endIndex, startIndex - endIndex));
           }
 
           if (line[startIndex] == '(') break;
 
         }
 
+        for (int j = i - 1; j >= 0; j --) {
+          if (line[j] == '=') {
+            functionAssigned ++;
+            break;
+          }
+          if (isVarChar(line[j])) break;
+        }
+
         balance = 1;
-        hasArgs = false;
+        functionArgsCount = 0;
+        functionHasArgs = false;
 
-        for (i = startIndex + 1; balance != 0; i ++) {
+        for (endIndex = startIndex + 1; balance != 0; endIndex ++) {
 
-          if (line[i] == '(') balance ++;
-          else if (line[i] == ')') balance --;
+          if (line[endIndex] == '(') balance ++;
+          else if (line[endIndex] == ')') balance --;
 
           // Find variables in the function definition
-          if (isVarChar(line[i])) {
-            hasArgs = true;
-            if (!isVarChar(line[i - 1])) startIndex = i;
+          if (isVarChar(line[endIndex])) {
+            functionArgsCount ++;
+            functionHasArgs = true;
+            if (!isVarChar(line[endIndex - 1])) startIndex = endIndex;
           } else {
-            if (isVarChar(line[i - 1])) vars[scope + 1].push_back(line.substr(startIndex, i - startIndex));
+            tmparg = line.substr(startIndex, endIndex - startIndex);
+            functionArgs.push_back(tmparg);
+            if (isVarChar(line[endIndex - 1])) vars[scope + 1].push_back(tmparg);
           }
 
         }
 
-        i --;
+        endIndex --;
         for (int j = 0; j <= scope; j ++) {
 
           for (int k = 0; k < vars[j].size(); k ++) {
@@ -228,18 +269,38 @@ int main (const int argc, char *argv[]) {
               continue;
             }
 
-            if (hasArgs || k > 0) {
-              hasArgs = true;
-              line.insert(i, ",");
-              i ++;
-            }
+            // Check if the function already accepts some arguments
+            if (functionArgsCount > 0) {
 
-            line.insert(i, vars[j][k]);
-            i += vars[j][k].length();
-            line.insert(i, "=");
-            i ++;
-            line.insert(i, vars[j][k]);
-            i += vars[j][k].length();
+              // Check if any of the existing arguments overlap with variables from above scopes
+              functionRemovedArg = false;
+
+              for (int l = 0; l < functionArgs.size(); l ++) {
+                if (vars[j][k] == functionArgs[l]) {
+                  functionArgs.erase(functionArgs.begin() + l);
+                  functionRemovedArg = true;
+                  functionArgsCount --;
+                  break;
+                }
+              }
+
+              if (functionRemovedArg) continue;
+
+            }
+            
+            // Inser a comma if there's an argument before this
+            if (functionHasArgs) {
+              line.insert(endIndex, ",");
+              endIndex ++;
+            } else functionHasArgs = true;
+            
+            // Simulate closure by adding predefined function arguments
+            line.insert(endIndex, vars[j][k]);
+            endIndex += vars[j][k].length();
+            line.insert(endIndex, "=");
+            endIndex++;
+            line.insert(endIndex, vars[j][k]);
+            endIndex += vars[j][k].length();
 
           }
 

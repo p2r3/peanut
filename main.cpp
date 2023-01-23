@@ -16,7 +16,7 @@ bool isVarChar (char c) {
 string inputfname, newfname, line, tmparg;
 vector<string> vars[64], functionArgs;
 int scope = 0, balance = 0, startIndex, endIndex, templateEmbedDepth = 0, inDefineBalance[64] = {0}, functionAssigned = 0, functionArgsCount;
-bool inString = false, inTemplateString = false, inComment = false, inDefine[64] = {false}, inAssignment, functionHasName, functionRemovedArg, functionHasArgs;
+bool inString = false, inTemplateString = false, inComment = false, inDefine[64] = {false}, lookForDefine = false, inAssignment, functionHasName, functionRemovedArg, functionHasArgs;
 
 int main (const int argc, char *argv[]) {
 
@@ -41,8 +41,6 @@ int main (const int argc, char *argv[]) {
   }
 
   while (getline(input, line)) {
-
-    inDefine[scope] = false;
 
     for (int i = 0; i < line.length(); i ++) {
 
@@ -94,7 +92,11 @@ int main (const int argc, char *argv[]) {
       if (inComment) continue;
 
       // Close variable definition set upon semicolon
-      if (line[i] == ';') { inDefine[scope] = false; continue; }
+      if (line[i] == ';') {
+        inDefine[scope] = false;
+        lookForDefine = false;
+        continue;
+      }
 
       // Calculate current scope by counting brackets
       if (line[i] == '{') {
@@ -105,6 +107,7 @@ int main (const int argc, char *argv[]) {
       if (line[i] == '}') {
         inDefine[scope] = false;
         inDefineBalance[scope] = 0;
+        lookForDefine = false;
         vars[scope].clear();
         scope --;
         continue;
@@ -182,13 +185,19 @@ int main (const int argc, char *argv[]) {
       }
 
       // Continue looking for variables if new ones could potentially be defined.
-      if (inDefine[scope] && inDefineBalance[scope] == 0 && line[i] == ',') {
+      if (inDefine[scope] && inDefineBalance[scope] == 0 && (line[i] == ',' || lookForDefine)) {
 
-        if (i == line.length() - 1) continue;
+        // Continue looking for further variables on the next line
+        if (i == line.length() - 1) {
+          lookForDefine = true;
+          break;
+        }
+
         for (startIndex = i + 1; !isVarChar(line[startIndex]); startIndex ++);
         for (i = startIndex + 1; isVarChar(line[i]); i ++);
 
         vars[scope].push_back(line.substr(startIndex, i - startIndex));
+        lookForDefine = false;
         continue;
 
       }
@@ -272,7 +281,7 @@ int main (const int argc, char *argv[]) {
 
             }
             
-            // Inser a comma if there's an argument before this
+            // Insert a comma if there's an argument before this
             if (functionHasArgs) {
               line.insert(endIndex, ",");
               endIndex ++;
@@ -292,6 +301,19 @@ int main (const int argc, char *argv[]) {
 
         continue;
 
+      }
+
+    }
+
+    if (inDefine[scope]) {
+
+      for (int j = line.length() - 1; j >= 0; j --) {
+        if (line[j] == ' ') continue;
+        if (line[j] != ',') {
+          inDefine[scope] = false;
+          lookForDefine = false;
+        }
+        break;
       }
 
     }

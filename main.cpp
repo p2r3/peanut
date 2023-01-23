@@ -15,11 +15,8 @@ bool isVarChar (char c) {
 
 string inputfname, newfname, line, tmparg;
 vector<string> vars[64], functionArgs;
-int scope = 0, balance = 0, startIndex, endIndex, templateEmbedDepth = 0, functionAssigned = 0, functionArgsCount;
+int scope = 0, balance = 0, startIndex, endIndex, templateEmbedDepth = 0, inDefineBalance[64] = {0}, functionAssigned = 0, functionArgsCount;
 bool inString = false, inTemplateString = false, inComment = false, inDefine[64] = {false}, inAssignment, functionHasName, functionRemovedArg, functionHasArgs;
-
-// 0 - none, 1 - function, 2 - object
-int bracketType[64] = {0};
 
 int main (const int argc, char *argv[]) {
 
@@ -37,7 +34,7 @@ int main (const int argc, char *argv[]) {
   ofstream output(newfname);
 
   if (!input.is_open()) {
-    cout << "File \"" << inputfname << " could not be opened.\n";
+    cout << "File \"" << inputfname << "\" could not be opened.\n";
     input.close();
     output.close();
     return 1;
@@ -99,49 +96,36 @@ int main (const int argc, char *argv[]) {
       // Close variable definition set upon semicolon
       if (line[i] == ';') { inDefine[scope] = false; continue; }
 
-      if (!inDefine[scope] || bracketType[scope + 1] == 1) {
-
-        // Calculate current scope by counting brackets
-        if (line[i] == '{') {
-          scope ++;
-          continue;
-        }
-        // Closing a block means never returning to it, so we clear all current scope specific values
-        if (line[i] == '}') {
-          inDefine[scope] = false;
-          vars[scope].clear();
-          bracketType[scope] = 0;
-          scope --;
-          continue;
-        }
-
-      } else if (inDefine[scope]) {
-
-        if (line[i] == '{') {
-          scope ++;
-          bracketType[scope] = 2;
-          continue;
-        }
-
-        if (line[i] == '}') {
-          bracketType[scope] = 0;
-          scope --;
-          continue;
-        }
-
+      // Calculate current scope by counting brackets
+      if (line[i] == '{') {
+        scope ++;
+        continue;
+      }
+      // Closing a block means never returning to it, so we clear all current scope specific values
+      if (line[i] == '}') {
+        inDefine[scope] = false;
+        inDefineBalance[scope] = 0;
+        vars[scope].clear();
+        scope --;
+        continue;
       }
 
-      // Define behavior in objects
-      if (bracketType[scope] == 2) {
+      // Check for key assignments in objects
+      if (line[i] == ':') {
+        line[i] = '=';
+        inDefine[scope] = true;
+        continue;
+      }
 
-        if (line[i] == ':') {
-          line[i] = '=';
-          inDefine[scope] = true;
+      // Keep track of bracket balance while defining variables
+      if (inDefine[scope]) {
+
+        if (line[i] == '(') {
+          inDefineBalance[scope] ++;
           continue;
         }
-
-        if (line[i] == ',') {
-          inDefine[scope] = false;
+        if (line[i] == ')') {
+          inDefineBalance[scope] --;
           continue;
         }
 
@@ -198,8 +182,9 @@ int main (const int argc, char *argv[]) {
       }
 
       // Continue looking for variables if new ones could potentially be defined.
-      if (inDefine[scope] && line[i] == ',') {
+      if (inDefine[scope] && inDefineBalance[scope] == 0 && line[i] == ',') {
 
+        if (i == line.length() - 1) continue;
         for (startIndex = i + 1; !isVarChar(line[startIndex]); startIndex ++);
         for (i = startIndex + 1; isVarChar(line[i]); i ++);
 
@@ -211,7 +196,6 @@ int main (const int argc, char *argv[]) {
       // Apply found variables to functions within the same scope
       if (line.compare(i, 8, "function") == 0 && (i == 0 || !isVarChar(line[i - 1])) && !isVarChar(line[i + 8])) {
 
-        bracketType[scope + 1] = 1;
         functionHasName = false;
         endIndex = i + 8;
 
@@ -234,7 +218,7 @@ int main (const int argc, char *argv[]) {
             functionAssigned ++;
             break;
           }
-          if (isVarChar(line[j])) break;
+          if (isVarChar(line[j]) || line[j] == ';') break;
         }
 
         balance = 1;
@@ -298,7 +282,7 @@ int main (const int argc, char *argv[]) {
             line.insert(endIndex, vars[j][k]);
             endIndex += vars[j][k].length();
             line.insert(endIndex, "=");
-            endIndex++;
+            endIndex ++;
             line.insert(endIndex, vars[j][k]);
             endIndex += vars[j][k].length();
 

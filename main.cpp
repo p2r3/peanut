@@ -222,13 +222,7 @@ int main (const int argc, char *argv[]) {
 
         }
 
-        for (int j = i - 1; j >= 0; j --) {
-          if (line[j] == '=') {
-            functionAssigned ++;
-            break;
-          }
-          if (isVarChar(line[j]) || line[j] == ';') break;
-        }
+        if (inDefine[scope]) functionAssigned ++;
 
         balance = 1;
         functionArgsCount = 0;
@@ -292,8 +286,8 @@ int main (const int argc, char *argv[]) {
             endIndex += vars[j][k].length();
             line.insert(endIndex, "=");
             endIndex ++;
-            line.insert(endIndex, vars[j][k]);
-            endIndex += vars[j][k].length();
+            line.insert(endIndex, vars[j][k] + "||null");
+            endIndex += vars[j][k].length() + 6;
 
           }
 

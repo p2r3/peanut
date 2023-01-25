@@ -14,7 +14,7 @@ bool isVarChar (char c) {
 }
 
 string inputfname, newfname, line, tmparg;
-vector<string> vars[64], functionArgs;
+vector<pair <string, bool>> vars[64], functionArgs;
 int scope = 0, balance = 0, startIndex, endIndex, templateEmbedDepth = 0, inDefineBalance[64] = {0}, functionAssigned = 0, functionArgsCount;
 bool inString = false, inTemplateString = false, inComment = false, inDefine[64] = {false}, lookForDefine = false, inAssignment, functionHasName, functionRemovedArg, functionHasArgs;
 
@@ -146,7 +146,7 @@ int main (const int argc, char *argv[]) {
         for (startIndex = i + 6; !isVarChar(line[startIndex]); startIndex ++);
         for (i = startIndex + 1; isVarChar(line[i]); i ++);
 
-        vars[scope].push_back(line.substr(startIndex, i - startIndex));
+        vars[scope].push_back(make_pair(line.substr(startIndex, i - startIndex), false));
         continue;
 
       }
@@ -196,7 +196,7 @@ int main (const int argc, char *argv[]) {
         for (startIndex = i + 1; !isVarChar(line[startIndex]); startIndex ++);
         for (i = startIndex + 1; isVarChar(line[i]); i ++);
 
-        vars[scope].push_back(line.substr(startIndex, i - startIndex));
+        vars[scope].push_back(make_pair(line.substr(startIndex, i - startIndex), false));
         lookForDefine = false;
         continue;
 
@@ -208,6 +208,15 @@ int main (const int argc, char *argv[]) {
         functionHasName = false;
         endIndex = i + 8;
 
+        for (int j = i - 1; j >= 0; j --) {
+          if (line[j] == '=') {
+            vars[scope][vars[scope].size() - 1].second = true;
+            functionAssigned ++;
+            break;
+          }
+          if (isVarChar(line[j]) || line[j] == ';') break;
+        }
+
         for (startIndex = endIndex; startIndex < line.length(); startIndex ++) {
 
           if (!functionHasName) {
@@ -215,14 +224,12 @@ int main (const int argc, char *argv[]) {
             endIndex = startIndex;
           } else if (!isVarChar(line[startIndex]) && functionAssigned == 0) {
             functionAssigned = 1;
-            vars[scope].push_back(line.substr(endIndex, startIndex - endIndex));
+            vars[scope].push_back(make_pair(line.substr(endIndex, startIndex - endIndex), true));
           }
 
           if (line[startIndex] == '(') break;
 
         }
-
-        if (inDefine[scope]) functionAssigned ++;
 
         balance = 1;
         functionArgsCount = 0;
@@ -240,8 +247,8 @@ int main (const int argc, char *argv[]) {
             if (!isVarChar(line[endIndex - 1])) startIndex = endIndex;
           } else {
             tmparg = line.substr(startIndex, endIndex - startIndex);
-            functionArgs.push_back(tmparg);
-            if (isVarChar(line[endIndex - 1])) vars[scope + 1].push_back(tmparg);
+            functionArgs.push_back(make_pair(tmparg, false));
+            if (isVarChar(line[endIndex - 1])) vars[scope + 1].push_back(make_pair(tmparg, false));
           }
 
         }
@@ -251,10 +258,8 @@ int main (const int argc, char *argv[]) {
 
           for (int k = 0; k < vars[j].size(); k ++) {
 
-            if (j == scope && k == vars[j].size() - functionAssigned) {
-              functionAssigned --;
-              continue;
-            }
+            // Check if we're including the function istelf
+            if (vars[j][k].second) continue;
 
             // Check if the function already accepts some arguments
             if (functionArgsCount > 0) {
@@ -282,12 +287,12 @@ int main (const int argc, char *argv[]) {
             } else functionHasArgs = true;
             
             // Simulate closure by adding predefined function arguments
-            line.insert(endIndex, vars[j][k]);
-            endIndex += vars[j][k].length();
+            line.insert(endIndex, vars[j][k].first);
+            endIndex += vars[j][k].first.length();
             line.insert(endIndex, "=");
             endIndex ++;
-            line.insert(endIndex, vars[j][k] + "||null");
-            endIndex += vars[j][k].length() + 6;
+            line.insert(endIndex, vars[j][k].first);
+            endIndex += vars[j][k].first.length();
 
           }
 

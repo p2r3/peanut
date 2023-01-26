@@ -116,7 +116,6 @@ int main (const int argc, char *argv[]) {
       // Check for key assignments in objects
       if (line[i] == ':') {
         line[i] = '=';
-        inDefine[scope] = true;
         continue;
       }
 
@@ -147,6 +146,7 @@ int main (const int argc, char *argv[]) {
         for (i = startIndex + 1; isVarChar(line[i]); i ++);
 
         vars[scope].push_back(make_pair(line.substr(startIndex, i - startIndex), false));
+        i --;
         continue;
 
       }
@@ -197,6 +197,7 @@ int main (const int argc, char *argv[]) {
 
         vars[scope].push_back(make_pair(line.substr(startIndex, i - startIndex), false));
         lookForDefine = false;
+        i --;
         continue;
 
       }
@@ -303,7 +304,7 @@ int main (const int argc, char *argv[]) {
 
     }
 
-    if (inDefine[scope]) {
+    if (inDefine[scope] && !inTemplateString) {
 
       for (int j = line.length() - 1; j >= 0; j --) {
         if (line[j] == ' ') continue;

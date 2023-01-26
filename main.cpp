@@ -157,7 +157,6 @@ int main (const int argc, char *argv[]) {
         // Remove "var" keyword
         line.erase(i, 4);
 
-        inDefine[scope] = true;
         inAssignment = true;
         balance = 0;
 
@@ -166,8 +165,8 @@ int main (const int argc, char *argv[]) {
 
           if (!inAssignment) {
 
-            if (line[j] == '(' || line[j] == '{') balance ++;
-            else if (line[j] == ')' || line[j] == '}') balance --;
+            if (line[j] == '(' || line[j] == '{' || line[j] == '[') balance ++;
+            else if (line[j] == ')' || line[j] == '}' || line[j] == ']') balance --;
             else if (line[j] == ',' && balance == 0) inAssignment = true;
 
           } else if (line[j] == '=') {

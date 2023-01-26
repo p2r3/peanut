@@ -123,11 +123,11 @@ int main (const int argc, char *argv[]) {
       // Keep track of bracket balance while defining variables
       if (inDefine[scope]) {
 
-        if (line[i] == '(') {
+        if (line[i] == '(' || line[i] == '[') {
           inDefineBalance[scope] ++;
           continue;
         }
-        if (line[i] == ')') {
+        if (line[i] == ')' || line[i] == ']') {
           inDefineBalance[scope] --;
           continue;
         }

@@ -15,8 +15,8 @@ bool isVarChar (char c) {
 
 string inputfname, newfname, line, tmparg;
 vector<pair <string, bool>> vars[64], functionArgs;
-int scope = 0, balance = 0, startIndex, endIndex, templateEmbedDepth = 0, inDefineBalance[64] = {0}, functionAssigned = 0, functionArgsCount;
-bool inString = false, inTemplateString = false, inComment = false, inDefine[64] = {false}, lookForDefine = false, inAssignment, functionHasName, functionRemovedArg, functionHasArgs;
+int scope = 0, balance = 0, lineNumber = 0, startIndex, endIndex, templateEmbedDepth = 0, inDefineBalance[64] = {0}, functionAssigned = 0, functionArgsCount, freeVarStart = -1;
+bool inString = false, inTemplateString = false, inComment = false, inDefine[64] = {false}, lookForDefine = false, inAssignment, functionHasName, functionRemovedArg, functionHasArgs, debugMode = false;
 
 int main (const int argc, char *argv[]) {
 
@@ -41,6 +41,13 @@ int main (const int argc, char *argv[]) {
   }
 
   while (getline(input, line)) {
+
+    lineNumber ++;
+    if (line == "//#DEBUG") {
+      lineNumber ++;
+      debugMode = !debugMode;
+      continue;
+    }
 
     for (int i = 0; i < line.length(); i ++) {
 
@@ -115,8 +122,15 @@ int main (const int argc, char *argv[]) {
 
       // Check for key assignments in objects
       if (line[i] == ':') {
+
+        if (i == freeVarStart) {
+          freeVarStart = -1;
+          continue;
+        }
+        
         line[i] = '=';
         continue;
+
       }
 
       // Keep track of bracket balance while defining variables
@@ -214,7 +228,7 @@ int main (const int argc, char *argv[]) {
             functionAssigned ++;
             break;
           }
-          if (isVarChar(line[j]) || line[j] == ';') break;
+          if (line[j] == ';') break;
         }
 
         for (startIndex = endIndex; startIndex < line.length(); startIndex ++) {
@@ -243,7 +257,6 @@ int main (const int argc, char *argv[]) {
           // Find variables in the function definition
           if (isVarChar(line[endIndex])) {
             functionArgsCount ++;
-            functionHasArgs = true;
             if (!isVarChar(line[endIndex - 1])) startIndex = endIndex;
           } else {
             tmparg = line.substr(startIndex, endIndex - startIndex);
@@ -253,7 +266,10 @@ int main (const int argc, char *argv[]) {
 
         }
 
-        endIndex --;
+        line.insert(endIndex, ":(");
+        freeVarStart = endIndex;
+        endIndex += 2;
+
         for (int j = 0; j <= scope; j ++) {
 
           for (int k = 0; k < vars[j].size(); k ++) {
@@ -286,17 +302,15 @@ int main (const int argc, char *argv[]) {
               endIndex ++;
             } else functionHasArgs = true;
             
-            // Simulate closure by adding predefined function arguments
-            line.insert(endIndex, vars[j][k].first);
-            endIndex += vars[j][k].first.length();
-            line.insert(endIndex, "=");
-            endIndex ++;
+            // Simulate closure by adding free variables
             line.insert(endIndex, vars[j][k].first);
             endIndex += vars[j][k].first.length();
 
           }
 
         }
+
+        line.insert(endIndex, ")");
 
         continue;
 
@@ -315,6 +329,10 @@ int main (const int argc, char *argv[]) {
         break;
       }
 
+    }
+
+    if (debugMode && !inTemplateString && !inDefine[scope] && !lookForDefine && !inComment) {
+      output << "printl(\"peanut debug reached " << lineNumber << "\");\n";
     }
 
     if (inTemplateString) output << line << "\\n";

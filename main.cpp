@@ -15,7 +15,7 @@ bool isVarChar (char c) {
 
 string inputfname, newfname, line, tmparg;
 vector<pair <string, bool>> vars[64], functionArgs;
-int scope = 0, balance = 0, lineNumber = 0, startIndex, endIndex, templateEmbedDepth = 0, inDefineBalance[64] = {0}, functionAssigned = 0, functionArgsCount, freeVarStart = -1;
+int scope = 0, balance = 0, lineNumber = 0, startIndex, endIndex, templateEmbedDepth = 0, inDefineBalance[64] = {0}, functionAssigned = 0, functionArgsCount, freeVarStart = -1, forDefineBalance = 0;
 bool inString = false, inTemplateString = false, inComment = false, inDefine[64] = {false}, lookForDefine = false, inAssignment, functionHasName, functionRemovedArg, functionHasArgs, debugMode = false;
 
 int main (const int argc, char *argv[]) {
@@ -147,12 +147,29 @@ int main (const int argc, char *argv[]) {
 
       }
 
+      // Find the end of for loops
+      if (forDefineBalance != 0) {
+
+        if (line[i] == '(') {
+          forDefineBalance ++;
+          continue;
+        }
+        if (line[i] == ')') {
+          forDefineBalance --;
+          continue;
+        }
+
+      }
+
       // Find variables defined using the "let" keyword
       if (!inDefine[scope] && line.compare(i, 4, "let ") == 0 && (i == 0 || !isVarChar(line[i - 1]))) {
 
         // Replace "let" with "local"
         line.erase(i, 3);
         line.insert(i, "local");
+
+        // Don't store the variable if we're in a for loop
+        if (forDefineBalance != 0) continue;
 
         inDefine[scope] = true;
 
@@ -312,6 +329,16 @@ int main (const int argc, char *argv[]) {
 
         line.insert(endIndex, ")");
 
+        continue;
+
+      }
+
+      // Don't keep track of locals defined in for loops
+      if (line.compare(i, 3, "for") == 0 && (i == 0 || !isVarChar(line[i - 1])) && !isVarChar(line[i + 3])) {
+
+        while (line[i] != '(') i ++;
+        forDefineBalance = 1;
+        
         continue;
 
       }

@@ -9,5 +9,4 @@ Currently implemented:
 
 Known issues:
   - "var" definitions cannot span multiple lines
-  - locals in for loops are cloned to functions outside the loop
   - ternary operations and switch statements are broken

@@ -292,7 +292,7 @@ int main (const int argc, char *argv[]) {
           for (int k = 0; k < vars[j].size(); k ++) {
 
             // Check if we're including the function istelf
-            if (vars[j][k].second) continue;
+            if (vars[j][k].second && k == vars[j].size() - 1) continue;
 
             // Check if the function already accepts some arguments
             if (functionArgsCount > 0) {

@@ -168,15 +168,15 @@ int main (const int argc, char *argv[]) {
         line.erase(i, 3);
         line.insert(i, "local");
 
-        // Don't store the variable if we're in a for loop
-        if (forDefineBalance != 0) continue;
-
         inDefine[scope] = true;
 
         for (startIndex = i + 6; !isVarChar(line[startIndex]); startIndex ++);
         for (i = startIndex + 1; isVarChar(line[i]); i ++);
 
-        vars[scope].push_back(make_pair(line.substr(startIndex, i - startIndex), false));
+        // Don't store the variable outside of a for loop
+        if (forDefineBalance != 0) vars[scope + 1].push_back(make_pair(line.substr(startIndex, i - startIndex), false));
+        else vars[scope].push_back(make_pair(line.substr(startIndex, i - startIndex), false));
+
         i --;
         continue;
 

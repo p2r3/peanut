@@ -14,7 +14,8 @@ bool isVarChar (char c) {
 }
 
 string inputfname, newfname, line, tmparg;
-vector<pair <string, bool>> vars[64], functionArgs;
+vector<pair <string, bool>> vars[64];
+vector<string> functionArgs;
 int scope = 0, balance = 0, lineNumber = 0, startIndex, endIndex, templateEmbedDepth = 0, inDefineBalance[64] = {0}, functionAssigned = 0, functionArgsCount, freeVarStart = -1, forDefineBalance = 0;
 bool inString = false, inTemplateString = false, inComment = false, inDefine[64] = {false}, lookForDefine = false, inAssignment, functionHasName, functionRemovedArg, functionHasArgs, debugMode = false;
 
@@ -264,6 +265,7 @@ int main (const int argc, char *argv[]) {
 
         balance = 1;
         functionArgsCount = 0;
+        functionArgs.clear();
         functionHasArgs = false;
 
         for (endIndex = startIndex + 1; balance != 0; endIndex ++) {
@@ -277,7 +279,7 @@ int main (const int argc, char *argv[]) {
             if (!isVarChar(line[endIndex - 1])) startIndex = endIndex;
           } else {
             tmparg = line.substr(startIndex, endIndex - startIndex);
-            functionArgs.push_back(make_pair(tmparg, false));
+            functionArgs.push_back(tmparg);
             if (isVarChar(line[endIndex - 1])) vars[scope + 1].push_back(make_pair(tmparg, false));
           }
 
@@ -301,7 +303,7 @@ int main (const int argc, char *argv[]) {
               functionRemovedArg = false;
 
               for (int l = 0; l < functionArgs.size(); l ++) {
-                if (vars[j][k] == functionArgs[l]) {
+                if (vars[j][k].first == functionArgs[l]) {
                   functionArgs.erase(functionArgs.begin() + l);
                   functionRemovedArg = true;
                   functionArgsCount --;

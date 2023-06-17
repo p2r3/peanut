@@ -16,7 +16,7 @@ bool isVarChar (char c) {
 string inputfname, newfname, line, tmparg;
 vector<pair <string, bool>> vars[64];
 vector<string> functionArgs;
-int scope = 0, balance = 0, lineNumber = 0, startIndex, endIndex, templateEmbedDepth = 0, inDefineBalance[64] = {0}, functionAssigned = 0, functionArgsCount, freeVarStart = -1, forDefineBalance = 0;
+int scope = 0, balance = 0, lineNumber = 0, startIndex, endIndex, templateEmbedDepth = 0, inDefineBalance[64] = {0}, functionAssigned = 0, functionArgsCount, freeVarStart = -1, forDefineBalance = 0, functionHeadState = 0;
 bool inString = false, inTemplateString = false, inComment = false, inDefine[64] = {false}, lookForDefine = false, inAssignment, functionHasName, functionRemovedArg, functionHasArgs, debugMode = false;
 
 int main (const int argc, char *argv[]) {
@@ -124,6 +124,11 @@ int main (const int argc, char *argv[]) {
       // Check for key assignments in objects
       if (line[i] == ':') {
 
+        if (line[i + 1] == ':') {
+          i += 2;
+          continue;
+        }
+
         if (i == freeVarStart) {
           freeVarStart = -1;
           continue;
@@ -189,6 +194,10 @@ int main (const int argc, char *argv[]) {
         // Remove "var" keyword
         line.erase(i, 4);
 
+        // Insert "::" for first variable
+        line.insert(i, "::");
+        i += 2;
+
         inAssignment = true;
         balance = 0;
 
@@ -201,6 +210,11 @@ int main (const int argc, char *argv[]) {
             else if (line[j] == ')' || line[j] == '}' || line[j] == ']') balance --;
             else if (line[j] == ',' && balance == 0) inAssignment = true;
 
+          } else if (!isVarChar(line[j - 1]) && isVarChar(line[j])) {
+            
+            line.insert(j, "::");
+            j += 2;
+          
           } else if (line[j] == '=') {
 
             line[j] = '-';
@@ -267,20 +281,39 @@ int main (const int argc, char *argv[]) {
         functionArgsCount = 0;
         functionArgs.clear();
         functionHasArgs = false;
+        functionHeadState = 0;
 
         for (endIndex = startIndex + 1; balance != 0; endIndex ++) {
 
           if (line[endIndex] == '(') balance ++;
           else if (line[endIndex] == ')') balance --;
 
+          if (balance == 1) {
+            if (line[endIndex] == '=') functionHeadState = 2;
+            else if (line[endIndex] == ',') functionHeadState = 0;
+          }
+
+          if (functionHeadState == 2) continue;
+
           // Find variables in the function definition
-          if (isVarChar(line[endIndex])) {
-            functionArgsCount ++;
-            if (!isVarChar(line[endIndex - 1])) startIndex = endIndex;
+          if (functionHeadState == 0) {
+
+            // Head state 0 means we're looking for new variables
+            if (isVarChar(line[endIndex]) && !isVarChar(line[endIndex - 1])) {
+              startIndex = endIndex;
+              functionArgsCount ++;
+              functionHeadState = 1;
+            }
+
           } else {
-            tmparg = line.substr(startIndex, endIndex - startIndex);
-            functionArgs.push_back(tmparg);
-            if (isVarChar(line[endIndex - 1])) vars[scope + 1].push_back(make_pair(tmparg, false));
+            
+            // Head state 1 means we're looking for the end of a variable
+            if (!isVarChar(line[endIndex]) && isVarChar(line[endIndex - 1])) {
+              tmparg = line.substr(startIndex, endIndex - startIndex);
+              functionArgs.push_back(tmparg);
+              vars[scope + 1].push_back(make_pair(tmparg, false));
+            }
+
           }
 
         }
